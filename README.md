@@ -42,7 +42,7 @@ The app reads the pre‑computed objects in `data/` by default. No credentials a
 ## Model
 The joint analysis of genetic and environmental factors and their impact on health outcomes enables probabilistic modeling of causal pathways. The diagram illustrates a gene-environment mediation framework where genetic factors G influence health outcome H through direct effects and indirect effects mediated by environmental factors E, which comprise both measured (Em) and unmeasured (Eu) components. The indirect pathway reflects the phenomenon of fine-scale population structure, whereby individuals sharing greater identity-by-descent (IBD) segments also tend to share environmental exposures due to geographic and social proximity. This framework facilitates the decomposition of total genetic effects into direct and environmentally-mediated components, enabling identification of potentially modifiable pathways in the genotype-phenotype relationship.
 
-<img width="785" height="517" alt="model" src="https://github.com/user-attachments/assets/06572967-5661-4971-bc45-94c45470073f" />
+<img width="255" height="217" alt="model" src="https://github.com/user-attachments/assets/06572967-5661-4971-bc45-94c45470073f" />
 
 
 ## Data notes
