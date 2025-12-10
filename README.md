@@ -4,7 +4,10 @@ Data and code for the manuscript **“Identity‑by‑descent captures shared en
 Pre‑print: <https://doi.org/10.1101/2025.05.03.652048>
 
 This repository is part of the **Biorepository, Informatics & Genomics (BIG) initiative at the University of Tennessee Health Science Center**.  
+
 Project home: <https://uthsc.edu/cbmi/big/>
+
+Data resource publication: <https://www.nature.com/articles/s41467-025-59375-0>
 
 **Live dashboard:** <https://francomarsico.shinyapps.io/BIG_Communities/>
 
