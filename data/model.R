@@ -35,7 +35,7 @@
 # 1) SETUP
 # -----------------------------
 setwd("/home/franco/Escritorio/genomica/relatedness/causal")
-pkgs <- c("dplyr","tibble","readr","forcats","mgcv","splines","ggplot2","stringr","tidyr","patchwork","purrr")
+pkgs <- c("dplyr","tibble","readr","forcats","splines","ggplot2","stringr","tidyr","patchwork","purrr")
 to_install <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
 if (length(to_install) > 0) install.packages(to_install)
 invisible(lapply(pkgs, library, character.only = TRUE))
@@ -419,7 +419,7 @@ estimate_interventional_effects <- function(d, outcome, mediators,
       fm  <- stats::as.formula(paste0(paste0(m_imp, "_t"), " ~ ", paste(rhs, collapse = " + ")))
       
       # Fit model (Gaussian)
-      fit_m <- mgcv::gam(fm, data = d_tr, family = stats::gaussian(), weights = .w)
+      fit_m <- stats::glm(fm, data = d_tr, family = stats::gaussian(), weights = .w)
       med_models[[m_imp]] <- fit_m
       
       # Residuals in transformed space for bootstrap simulation
@@ -439,7 +439,7 @@ estimate_interventional_effects <- function(d, outcome, mediators,
     }
     
     # ---- Outcome model ----
-    fit_q <- mgcv::gam(f_q, data = d_tr, family = stats::binomial(), weights = .w)
+    fit_q <- stats::glm(f_q, data = d_tr, family = stats::binomial(), weights = .w)
     
     # ---- Simulate mediator draws under ref and each a ----
     draws_ref <- simulate_mediators_residboot(
@@ -510,6 +510,7 @@ estimate_interventional_effects <- function(d, outcome, mediators,
 # -----------------------------
 # 6) CLUSTER-ROBUST WEIGHTED BOOTSTRAP (Exp(1) BY COMMUNITY)
 # -----------------------------
+
 bootstrap_cluster_weight <- function(d, outcome, mediators, B = BOOT_REPS, seed = SEED_VAL) {
   set.seed(seed)
   
@@ -526,73 +527,134 @@ bootstrap_cluster_weight <- function(d, outcome, mediators, B = BOOT_REPS, seed 
   cl_lvls <- levels(cl)
   
   # -----------------------------
-  # PARALLEL BOOTSTRAP (PSOCK, 20 nodes)
+  # PARALLEL BOOTSTRAP (PSOCK, fault-tolerant)
   # -----------------------------
-  n_cores <- 20L
-  clust <- parallel::makeCluster(n_cores)
-  on.exit(parallel::stopCluster(clust), add = TRUE)
-  
-  # Load needed packages on workers (so %>% exists)
-  parallel::clusterEvalQ(clust, {
-    library(dplyr)
-    library(tibble)
-    library(forcats)
-    library(mgcv)
-    library(splines)
-  })
-  
-  # Export functions + globals needed by workers
-  parallel::clusterExport(
-    clust,
-    varlist = c(
-      "estimate_interventional_effects",
-      "simulate_mediators_residboot",
-      "make_mediator_spec",
-      "skewness",
-      "add_zero_weight_rows_for_factors",
-      "align_levels",
-      "rhs_with_splines",
-      "make_stratified_folds",
-      "BASE_VARS",
-      "REF_COMMUNITY",
-      "KFOLDS",
-      "MC_DRAWS",
-      "MIN_LEVEL_N"
-    ),
-    envir = .GlobalEnv
+  Sys.setenv(
+    OMP_NUM_THREADS = "1",
+    OPENBLAS_NUM_THREADS = "1",
+    MKL_NUM_THREADS = "1",
+    VECLIB_MAXIMUM_THREADS = "1"
   )
   
-  # Export local objects needed by workers
-  parallel::clusterExport(
-    clust,
-    varlist = c("d", "outcome", "mediators", "cmp", "cl", "cl_lvls", "seed"),
-    envir = environment()
-  )
+  n_cores <- 20L               
+  chunk_size <- max(1L, 2L * n_cores)
+  max_restarts <- 5L
   
   boot_one <- function(b) {
-    set.seed(seed + 100000L + b)
-    
-    w_cl <- stats::rexp(length(cl_lvls), rate = 1)
-    names(w_cl) <- cl_lvls
-    w_row <- w_cl[as.character(cl)]
-    
-    est_b <- estimate_interventional_effects(d, outcome, mediators, seed = seed + b, w = w_row)
-    est_b <- dplyr::right_join(tibble::tibble(treat_level = cmp), est_b, by = "treat_level")
-    
-    list(TE = est_b$TE, IDE = est_b$IDE, IIE = est_b$IIE)
+    tryCatch({
+      set.seed(seed + 100000L + b)
+      
+      w_cl <- stats::rexp(length(cl_lvls), rate = 1)
+      names(w_cl) <- cl_lvls
+      w_row <- w_cl[as.character(cl)]
+      
+      est_b <- estimate_interventional_effects(d, outcome, mediators, seed = seed + b, w = w_row)
+      est_b <- dplyr::right_join(tibble::tibble(treat_level = cmp), est_b, by = "treat_level")
+      
+      list(TE = est_b$TE, IDE = est_b$IDE, IIE = est_b$IIE)
+    }, error = function(e) {
+      list(TE = rep(NA_real_, k), IDE = rep(NA_real_, k), IIE = rep(NA_real_, k), .err = conditionMessage(e))
+    })
   }
   
-  parallel::clusterExport(clust, varlist = c("boot_one"), envir = environment())
+  init_cluster <- function(nc) {
+    clust <- parallel::makeCluster(nc, outfile = "")  
+    parallel::clusterEvalQ(clust, {
+      Sys.setenv(
+        OMP_NUM_THREADS = "1",
+        OPENBLAS_NUM_THREADS = "1",
+        MKL_NUM_THREADS = "1",
+        VECLIB_MAXIMUM_THREADS = "1"
+      )
+      library(dplyr)
+      library(tibble)
+      library(forcats)
+      library(splines)
+      invisible(NULL)
+    })
+    
+    parallel::clusterExport(
+      clust,
+      varlist = c(
+        "estimate_interventional_effects",
+        "simulate_mediators_residboot",
+        "make_mediator_spec",
+        "skewness",
+        "add_zero_weight_rows_for_factors",
+        "align_levels",
+        "rhs_with_splines",
+        "make_stratified_folds",
+        "BASE_VARS",
+        "REF_COMMUNITY",
+        "KFOLDS",
+        "MC_DRAWS",
+        "MIN_LEVEL_N"
+      ),
+      envir = .GlobalEnv
+    )
+    
+    parallel::clusterExport(
+      clust,
+      varlist = c("d", "outcome", "mediators", "cmp", "k", "cl", "cl_lvls", "seed", "boot_one"),
+      envir = environment()
+    )
+    
+    clust
+  }
   
-  res_list <- parallel::parLapply(clust, X = seq_len(B), fun = boot_one)
+  clust <- init_cluster(n_cores)
+  cleanup <- function() {
+    if (!is.null(clust)) {
+      try(parallel::stopCluster(clust), silent = TRUE)
+      clust <<- NULL
+    }
+  }
+  on.exit(cleanup(), add = TRUE)
+  
+  res_list <- vector("list", B)
+  pending <- seq_len(B)
+  restarts <- 0L
+  
+  while (length(pending) > 0) {
+    idx <- pending[seq_len(min(chunk_size, length(pending)))]
+    
+    tmp <- tryCatch(
+      parallel::parLapplyLB(clust, X = idx, fun = boot_one),
+      error = function(e) e
+    )
+    
+    if (inherits(tmp, "error")) {
+      restarts <- restarts + 1L
+      message("\n[BOOT] worker down: ", conditionMessage(tmp),
+              "\n[BOOT] restarting (restart #", restarts, ")...")
+      
+      cleanup()
+      
+      if (restarts > max_restarts) {
+        warning("\n[BOOT] Demasiados crashes. Relleno los bootstraps restantes con NA para terminar.")
+        for (bb in pending) {
+          res_list[[bb]] <- list(TE = rep(NA_real_, k), IDE = rep(NA_real_, k), IIE = rep(NA_real_, k))
+        }
+        break
+      }
+      
+      n_cores <- max(1L, floor(n_cores / 2L))
+      chunk_size <- max(1L, 2L * n_cores)
+      clust <- init_cluster(n_cores)
+      next
+    }
+    
+    for (i in seq_along(idx)) res_list[[idx[i]]] <- tmp[[i]]
+    pending <- setdiff(pending, idx)
+    cat(sprintf("\rBootstrap %d/%d (cores=%d)", B - length(pending), B, n_cores))
+  }
+  cat("\n")
   
   for (b in 1:B) {
     TE_b[b, ]  <- res_list[[b]]$TE
     IDE_b[b, ] <- res_list[[b]]$IDE
     IIE_b[b, ] <- res_list[[b]]$IIE
-    cat(sprintf("\rBootstrap %d/%d", b, B))
   }
-  cat("\n")
   
   ci <- function(mat) {
     lo <- apply(mat, 2, stats::quantile, probs = 0.025, na.rm = TRUE)
@@ -615,6 +677,7 @@ bootstrap_cluster_weight <- function(d, outcome, mediators, B = BOOT_REPS, seed 
       kfolds = KFOLDS
     )
 }
+
 
 # -----------------------------
 # 7) RUN ANALYSES
