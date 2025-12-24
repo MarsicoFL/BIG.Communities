@@ -21,7 +21,7 @@
 # -----------------------------
 # 1) SETUP
 # -----------------------------
-setwd("/home/franco/Escritorio/genomica/relatedness/causal")
+setwd("")
 
 pkgs <- c("dplyr","tibble","readr","forcats","splines","ggplot2","stringr","tidyr","patchwork","purrr")
 to_install <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
@@ -34,8 +34,8 @@ SEED_VAL      <- 123
 
 # Iterations (increased)
 KFOLDS        <- 3
-MC_DRAWS      <- 500     # was 50
-BOOT_REPS     <- 500     # was 50
+MC_DRAWS      <- 500     
+BOOT_REPS     <- 500     
 
 # Parallel bootstrap: default to 3 cores (your request)
 N_CORES       <- 3L      # if workers crash, code falls back to 3L minimum
@@ -45,7 +45,6 @@ SPLINE_DF     <- 3
 
 dir.create("Causal_Mediation_Output", showWarnings = FALSE, recursive = TRUE)
 
-# Unique run tag to avoid overwriting anything
 RUN_TAG <- format(Sys.time(), "%Y%m%d_%H%M%S")
 
 # -----------------------------
