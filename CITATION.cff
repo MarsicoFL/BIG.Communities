@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the associated paper."
+title: "BIG.Communities: IBD-based community detection and dashboard"
+authors:
+  - family-names: "Marsico"
+    given-names: "Franco"
+    affiliation: "Department of Genetics, Genomics and Informatics, UTHSC"
+repository-code: "https://github.com/MarsicoFL/BIG.Communities"
+url: "https://francomarsico.shinyapps.io/BIG_Communities/"
+license: MIT
+keywords:
+  - identity-by-descent
+  - community-detection
+  - biobank
+  - population-genetics
+  - pediatric
+preferred-citation:
+  type: article
+  title: "Identity-by-descent captures shared environmental factors at biobank scale"
+  authors:
+    - family-names: "Marsico"
+      given-names: "Franco"
+    - family-names: "Colonna"
+      given-names: "Vincenza"
+  year: 2026
+  notes: "Manuscript in preparation; cite this CITATION.cff for the software/dashboard."
